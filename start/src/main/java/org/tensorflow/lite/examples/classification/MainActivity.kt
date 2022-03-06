@@ -39,10 +39,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.RecyclerView
+import org.tensorflow.lite.examples.classification.ml.FlowerModel
+import org.tensorflow.lite.examples.classification.ml.InceptionV31Metadata1
 import org.tensorflow.lite.examples.classification.ui.RecognitionAdapter
 import org.tensorflow.lite.examples.classification.util.YuvToRgbConverter
 import org.tensorflow.lite.examples.classification.viewmodel.Recognition
 import org.tensorflow.lite.examples.classification.viewmodel.RecognitionListViewModel
+import org.tensorflow.lite.support.image.TensorImage
 import java.util.concurrent.Executors
 import kotlin.random.Random
 
@@ -126,6 +129,7 @@ class MainActivity : AppCompatActivity() {
         permissions: Array<String>,
         grantResults: IntArray
     ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 startCamera()
@@ -209,6 +213,10 @@ class MainActivity : AppCompatActivity() {
         // TODO 1: Add class variable TensorFlow Lite Model
         // Initializing the flowerModel by lazy so that it runs in the same thread when the process
         // method is called.
+        private val flowerModel = FlowerModel.newInstance(ctx)
+
+        // Loading the inception V3.1 model
+        private val inceptionModel = InceptionV31Metadata1.newInstance(ctx)
 
         // TODO 6. Optional GPU acceleration
 
@@ -218,15 +226,25 @@ class MainActivity : AppCompatActivity() {
             val items = mutableListOf<Recognition>()
 
             // TODO 2: Convert Image to Bitmap then to TensorImage
+            val tfImage = TensorImage.fromBitmap(toBitmap(imageProxy))
 
             // TODO 3: Process the image using the trained model, sort and pick out the top results
+//            val outputs = flowerModel.process(tfImage)
+            val outputs = inceptionModel.process(tfImage)
+                .probabilityAsCategoryList.apply {
+                    sortByDescending { it.score } // Sort with highest confidence first
+                }.take(MAX_RESULT_DISPLAY) // take the top results
+
 
             // TODO 4: Converting the top probability items into a list of recognitions
+            for (output in outputs) {
+                items.add(Recognition(output.label, output.score))
+            }
 
             // START - Placeholder code at the start of the codelab. Comment this block of code out.
-            for (i in 0 until MAX_RESULT_DISPLAY){
-                items.add(Recognition("Fake label $i", Random.nextFloat()))
-            }
+//            for (i in 0 until MAX_RESULT_DISPLAY){
+//                items.add(Recognition("Fake label $i", Random.nextFloat()))
+//            }
             // END - Placeholder code at the start of the codelab. Comment this block of code out.
 
             // Return the result
@@ -243,7 +261,7 @@ class MainActivity : AppCompatActivity() {
         private lateinit var bitmapBuffer: Bitmap
         private lateinit var rotationMatrix: Matrix
 
-        @SuppressLint("UnsafeExperimentalUsageError")
+        @SuppressLint("UnsafeExperimentalUsageError", "UnsafeOptInUsageError")
         private fun toBitmap(imageProxy: ImageProxy): Bitmap? {
 
             val image = imageProxy.image ?: return null
